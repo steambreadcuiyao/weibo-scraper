@@ -1,5 +1,6 @@
 """SQLite 数据库操作层 — 建表 + CRUD"""
 
+import os
 import sqlite3
 import json
 from datetime import datetime, timezone
@@ -8,6 +9,7 @@ from config import DB_PATH
 
 def get_conn():
     """获取数据库连接（启用 WAL 模式 + 外键）"""
+    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
