@@ -46,12 +46,12 @@ def setup_logging(log_level: int = logging.INFO):
 
     # ── 控制台 handler ──
     console = logging.StreamHandler()
-    console.setLevel(logging.WARNING)  # 控制台只显示 WARNING+
+    console.setLevel(log_level)  # 控制台与文件同级别，否则 werkzeug 无法启动
     console.setFormatter(logging.Formatter(LOG_FORMAT, DATE_FORMAT))
     root.addHandler(console)
 
     # 校准第三方库日志级别
-    logging.getLogger("werkzeug").setLevel(logging.WARNING)
+    # 注意：werkzeug 日志级别必须在 Flask 启动后才可修改，否则会导致服务器静默崩溃
     logging.getLogger("apscheduler").setLevel(logging.WARNING)
     logging.getLogger("playwright").setLevel(logging.WARNING)
     logging.getLogger("urllib3").setLevel(logging.WARNING)

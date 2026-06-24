@@ -394,9 +394,14 @@ async function loadAccounts() {
     const grp = await grpR.json();
     const tag = await tagR.json();
 
-    if (acc.ok) { _allAccounts = acc.data; renderAccounts(); }
-    if (grp.ok) { _allGroups = grp.data; renderGroups(); renderFilterDropdowns(); }
-    if (tag.ok) { _allTags = tag.data; renderTags(); renderFilterDropdowns(); }
+    if (acc.ok) _allAccounts = acc.data;
+    if (grp.ok) _allGroups = grp.data;
+    if (tag.ok) _allTags = tag.data;
+
+    renderAccounts();
+    renderGroups();
+    renderTags();
+    renderFilterDropdowns();
   } catch(e) { showToast("加载失败: "+e.message, "error"); }
 }
 
@@ -435,6 +440,12 @@ function clearAccountFilter() {
 
 function renderAccounts(accounts) {
   const data = accounts || _allAccounts;
+
+  // 始终更新添加账号的分组下拉（不受账号列表是否为空影响）
+  let opts = '<option value="">无分组</option>';
+  for (const g of _allGroups) opts += `<option value="${g.id}">${g.name}</option>`;
+  $("addGroup").innerHTML = opts;
+
   if (!data.length) {
     $("accountList").innerHTML = '<div class="empty"><div class="icon">📭</div>暂无账号，请添加</div>';
     $("accountCount").textContent = '';
@@ -471,11 +482,6 @@ function renderAccounts(accounts) {
   }
   html += "</tbody></table>";
   $("accountList").innerHTML = html;
-
-  // 同步更新添加账号的分组下拉
-  let opts = '<option value="">无分组</option>';
-  for (const g of _allGroups) opts += `<option value="${g.id}">${g.name}</option>`;
-  $("addGroup").innerHTML = opts;
 }
 
 async function addAccount() {
