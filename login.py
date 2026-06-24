@@ -66,8 +66,10 @@ def try_auto_login_with_saved_state() -> dict | None:
         return None
 
     logger.info("尝试用已保存的登录状态恢复...")
-    pw = sync_playwright().start()
+    pw = None
+    browser = None
     try:
+        pw = sync_playwright().start()
         browser = pw.chromium.launch(
             headless=PLAYWRIGHT_HEADLESS,
             args=["--no-sandbox", "--disable-setuid-sandbox"]
@@ -96,10 +98,12 @@ def try_auto_login_with_saved_state() -> dict | None:
         logger.warning(f"恢复登录失败: {e}")
         return None
     finally:
-        try: browser.close()
-        except: pass
-        try: pw.stop()
-        except: pass
+        if browser:
+            try: browser.close()
+            except: pass
+        if pw:
+            try: pw.stop()
+            except: pass
 
 
 # ── 2. 二维码登录 ─────────────────────────────────

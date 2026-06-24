@@ -8,7 +8,7 @@ import requests
 
 import database as db
 import login as login_mod
-from config import CRAWL_MAX_PAGES, CRAWL_MIN_DELAY, CRAWL_MAX_DELAY
+from config import CRAWL_MAX_PAGES, CRAWL_PAGE_SIZE, CRAWL_MIN_DELAY, CRAWL_MAX_DELAY
 
 logger = logging.getLogger("weibo.crawler")
 
@@ -217,7 +217,7 @@ def crawl_user(uid: str, max_pages: int = None, task_id: int = None,
     try:
         while page <= max_pages:
             # 构建请求参数
-            params = {"uid": uid, "page": page, "feature": 0}
+            params = {"uid": uid, "page": page, "feature": 0, "count": CRAWL_PAGE_SIZE}
             if since_id:
                 params["since_id"] = since_id
 
