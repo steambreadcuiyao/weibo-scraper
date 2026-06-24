@@ -14,11 +14,8 @@ env/
 .vscode/
 .idea/
 
-# Database
-data/*.db
-
-# Logs
-data/*.log
+# Data directory
+data/
 
 # OS
 .DS_Store
