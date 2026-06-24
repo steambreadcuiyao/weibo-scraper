@@ -1,0 +1,1651 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>微博爬虫监控系统</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#f0f2f5;--card:#fff;--text:#1e293b;--sub:#64748b;
+  --primary:#2563eb;--primary-hover:#1d4ed8;--primary-light:#eff6ff;
+  --accent:#0891b2;--accent-light:#ecfeff;
+  --border:#e2e8f0;--success:#16a34a;--warn:#d97706;--danger:#dc2626;
+  --shadow:0 1px 3px rgba(0,0,0,.06),0 1px 2px rgba(0,0,0,.04);
+  --shadow-md:0 4px 6px rgba(0,0,0,.07);
+  --radius:10px;
+}
+body{font:14px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC",Roboto,sans-serif;background:var(--bg);color:var(--text);-webkit-font-smoothing:antialiased}
+header{background:var(--card);border-bottom:1px solid var(--border);padding:0 28px;display:flex;align-items:center;height:60px;box-shadow:var(--shadow)}
+header h1{font-size:18px;font-weight:700;color:var(--primary);letter-spacing:-.3px}
+header .sub{margin-left:14px;font-size:12px;color:var(--sub);background:var(--bg);padding:2px 10px;border-radius:20px}
+
+nav{display:flex;gap:0;background:var(--card);border-bottom:1px solid var(--border);padding:0 28px}
+nav button{padding:14px 22px;border:none;background:none;font-size:13.5px;color:var(--sub);cursor:pointer;border-bottom:2px solid transparent;transition:all .15s;position:relative;top:1px;font-weight:500}
+nav button:hover{color:var(--text);background:#f8fafc}
+nav button.active{color:var(--primary);border-bottom-color:var(--primary);font-weight:600}
+
+main{padding:28px;max-width:1200px;margin:0 auto}
+.tab{display:none}
+.tab.active{display:block}
+@keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
+
+.card{background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);padding:22px;margin-bottom:18px;border:1px solid var(--border)}
+.card h2{font-size:15px;margin-bottom:16px;color:var(--text);border-bottom:1px solid var(--border);padding-bottom:10px;font-weight:600;display:flex;align-items:center;gap:8px}
+
+/* Status indicators */
+.status-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;flex-shrink:0}
+.status-dot.green{background:var(--success)}
+.status-dot.red{background:var(--danger)}
+.status-dot.yellow{background:var(--warn)}
+
+/* Forms */
+.form-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+.form-row:last-child{margin-bottom:0}
+input,select,textarea{padding:8px 12px;border:1px solid var(--border);border-radius:8px;font-size:13.5px;outline:none;transition:border .15s,box-shadow .15s;background:var(--card);color:var(--text)}
+input:focus,select:focus,textarea:focus{border-color:var(--primary);box-shadow:0 0 0 3px rgba(37,99,235,.1)}
+input::placeholder,textarea::placeholder{color:#94a3b8}
+input{flex:1;min-width:180px}
+select{cursor:pointer}
+
+.btn{padding:8px 16px;border:none;border-radius:8px;font-size:13.5px;cursor:pointer;font-weight:500;transition:all .15s;white-space:nowrap;display:inline-flex;align-items:center;gap:4px}
+.btn:active{transform:scale(.97)}
+.btn:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
+.btn-primary{background:var(--primary);color:#fff}
+.btn-primary:hover{background:var(--primary-hover);box-shadow:var(--shadow-md)}
+.btn-accent{background:var(--accent);color:#fff}
+.btn-accent:hover{opacity:.9;box-shadow:var(--shadow-md)}
+.btn-outline{background:var(--card);border:1px solid var(--border);color:var(--text)}
+.btn-outline:hover{background:var(--bg);border-color:#cbd5e1}
+.btn-sm{padding:5px 10px;font-size:12px;border-radius:6px}
+.btn-danger{background:var(--danger);color:#fff}
+.btn-danger:hover{opacity:.9}
+.btn-success{background:var(--success);color:#fff}
+.btn-success:hover{opacity:.9}
+.btn:disabled{opacity:.5;cursor:not-allowed;transform:none;box-shadow:none}
+
+/* Tables */
+.table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;padding:10px 12px;background:#f8fafc;color:var(--sub);font-weight:600;border-bottom:2px solid var(--border);font-size:11.5px;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap}
+td{padding:11px 12px;border-bottom:1px solid var(--border);vertical-align:middle}
+tr:nth-child(even){background:#fafbfc}
+tr:hover{background:var(--primary-light)}
+
+/* Tags */
+.tag{display:inline-flex;align-items:center;gap:2px;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600;line-height:1.6}
+.tag-success{background:#dcfce7;color:#166534}
+.tag-danger{background:#fee2e2;color:#991b1b}
+.tag-info{background:var(--primary-light);color:var(--primary)}
+.tag-warn{background:#fef3c7;color:#92400e}
+
+/* Stats grid */
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:18px}
+.stat-card{background:var(--card);border-radius:var(--radius);padding:18px;box-shadow:var(--shadow);border:1px solid var(--border);border-left:3px solid var(--border);text-align:left;transition:box-shadow .2s}
+.stat-card:hover{box-shadow:var(--shadow-md)}
+.stat-card .num{font-size:26px;font-weight:700;color:var(--text);line-height:1.2}
+.stat-card .label{font-size:11.5px;color:var(--sub);margin-top:2px}
+.stat-card:nth-child(1){border-left-color:var(--primary)}
+.stat-card:nth-child(2){border-left-color:var(--success)}
+.stat-card:nth-child(3){border-left-color:var(--warn)}
+.stat-card:nth-child(4){border-left-color:var(--accent)}
+
+/* Post preview */
+.post-preview{font-size:13px;line-height:1.65;margin-bottom:8px;max-height:3.2em;overflow:hidden;color:var(--text)}
+.post-meta{font-size:11px;color:var(--sub);display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.post-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:10px;transition:box-shadow .15s}
+.post-card:hover{box-shadow:var(--shadow-md);border-color:#cbd5e1}
+
+/* Toast */
+.toast{position:fixed;top:20px;right:20px;padding:12px 20px;border-radius:var(--radius);color:#fff;font-size:13.5px;z-index:9999;animation:slideIn .25s ease;max-width:400px;box-shadow:0 10px 25px rgba(0,0,0,.15);font-weight:500;letter-spacing:.2px}
+.toast.success{background:var(--success)}
+.toast.error{background:var(--danger)}
+.toast.info{background:var(--primary)}
+@keyframes slideIn{from{transform:translateX(120%);opacity:0}to{transform:translateX(0);opacity:1}}
+
+/* Loading */
+.spinner{display:inline-block;width:16px;height:16px;border:2.5px solid var(--border);border-top-color:var(--primary);border-radius:50%;animation:spin .6s linear infinite;margin-right:6px}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* Empty state */
+.empty{text-align:center;padding:48px 20px;color:var(--sub)}
+.empty .icon{font-size:40px;margin-bottom:12px;opacity:.6}
+.empty .hint{font-size:13px;color:#94a3b8;margin-top:4px}
+
+/* Modal */
+.modal-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(15,23,42,.45);z-index:999;display:flex;align-items:center;justify-content:center;animation:fadeIn .15s ease}
+.modal-overlay .modal-box{background:var(--card);border-radius:12px;padding:24px;min-width:420px;max-width:520px;box-shadow:0 20px 60px rgba(0,0,0,.2);max-height:90vh;overflow:auto;position:relative}
+.modal-close{position:absolute;top:12px;right:14px;width:28px;height:28px;border:none;background:none;font-size:18px;color:var(--sub);cursor:pointer;border-radius:6px;display:flex;align-items:center;justify-content:center}
+.modal-close:hover{background:var(--bg);color:var(--text)}
+
+/* System log */
+.log-terminal{background:#1a1b26;color:#a9b1d6;font:12px/1.7 'JetBrains Mono','Cascadia Code','Fira Code','Courier New',monospace;border-radius:var(--radius);padding:16px;max-height:70vh;overflow:auto;white-space:pre-wrap;word-break:break-all}
+.log-terminal .log-error{color:#f7768e}
+.log-terminal .log-warn{color:#e0af68}
+.log-terminal .log-info{color:#9ece6a}
+.log-terminal .log-debug{color:#7aa2f7}
+
+/* Quick tags */
+.quick-tag{display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:500;background:var(--bg);border:1px solid var(--border);cursor:pointer;transition:all .15s}
+.quick-tag:hover{background:var(--primary-light);border-color:var(--primary);color:var(--primary)}
+.quick-tag .remove{margin-left:2px;opacity:.5;font-weight:700}
+.quick-tag:hover .remove{opacity:1}
+
+/* Responsive */
+@media(max-width:768px){
+  header{padding:0 16px;height:52px}
+  header h1{font-size:16px}
+  nav{padding:0 12px;overflow-x:auto;white-space:nowrap}
+  nav button{padding:12px 14px;font-size:12.5px}
+  main{padding:14px}
+  .form-row{flex-direction:column}
+  .form-row input,.form-row select{width:100%;min-width:auto}
+  .card{padding:14px}
+  .modal-overlay .modal-box{min-width:auto;max-width:95vw;margin:10px}
+  table{font-size:12px}
+  th,td{padding:8px 6px}
+}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>📡 微博爬虫监控</h1>
+  <span class="sub" id="headerStatus">加载中...</span>
+</header>
+
+<nav>
+  <button class="active" data-tab="tab-credentials">登录凭证</button>
+  <button data-tab="tab-accounts">账号管理</button>
+  <button data-tab="tab-crawl">爬取控制</button>
+  <button data-tab="tab-search">数据搜索</button>
+  <button data-tab="tab-logs">系统日志</button>
+</nav>
+
+<main>
+  <!-- Tab 1: 登录凭证 -->
+  <div id="tab-credentials" class="tab active">
+    <div class="card">
+      <h2>📱 扫码登录微博</h2>
+      <div style="text-align:center;margin-bottom:12px">
+        <button class="btn btn-accent" onclick="startQrcodeLogin()">🔓 获取二维码</button>
+        <button class="btn btn-outline btn-sm" onclick="cancelQrcodeLogin()" style="margin-left:8px">取消</button>
+      </div>
+      <div id="qrcodeContainer" style="text-align:center;display:none">
+        <img id="qrcodeImg" src="" alt="微博登录二维码" style="max-width:300px;border:2px solid var(--border);border-radius:8px">
+        <p style="margin-top:8px;color:var(--sub);font-size:13px" id="qrcodeHint">请使用微博 App 扫描二维码</p>
+      </div>
+      <div id="loginStatus" style="text-align:center;font-size:13px;color:var(--sub);margin-top:8px"></div>
+    </div>
+
+    <div class="card">
+      <h2>📡 当前状态</h2>
+      <div id="credStatus"><div class="empty">点击上方获取二维码扫码登录</div></div>
+    </div>
+  </div>
+
+  <!-- Tab 2: 账号管理 -->
+  <div id="tab-accounts" class="tab">
+    <div class="card">
+      <h2>📋 添加爬取账号</h2>
+      <div class="form-row">
+        <input id="addUid" placeholder="输入微博 UID 或主页链接" style="flex:3">
+        <select id="addGroup" style="flex:1.5"><option value="">无分组</option></select>
+        <button class="btn btn-primary" onclick="addAccount()">➕ 添加</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>🏷 标签 / 分组管理</h2>
+      <div style="display:flex;gap:16px;flex-wrap:wrap">
+        <div style="flex:1;min-width:220px">
+          <div class="form-row">
+            <input id="newGroupName" placeholder="新建分组名" style="flex:1">
+            <button class="btn btn-sm btn-accent" onclick="addGroup()">＋分组</button>
+          </div>
+          <div id="groupList" style="font-size:13px"></div>
+        </div>
+        <div style="flex:1;min-width:220px">
+          <div class="form-row">
+            <input id="newTagName" placeholder="新建标签名" style="flex:1">
+            <button class="btn btn-sm btn-accent" onclick="addTag()">＋标签</button>
+          </div>
+          <div id="tagList" style="font-size:13px;display:flex;flex-wrap:wrap;gap:4px"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>📊 已添加账号 <span style="font-weight:400;font-size:12px;color:var(--sub)" id="accountCount"></span></h2>
+      <div class="form-row" style="margin-bottom:12px">
+        <select id="filterGroup" style="flex:0.8" onchange="filterAccounts()"><option value="">全部分组</option></select>
+        <select id="filterTag" style="flex:0.8" onchange="filterAccounts()"><option value="">全部标签</option></select>
+        <input id="filterKeyword" placeholder="搜索昵称或UID..." style="flex:1.2" oninput="filterAccounts()">
+        <select id="filterStatus" style="flex:0.6" onchange="filterAccounts()">
+          <option value="">全部状态</option><option value="1">启用</option><option value="0">停用</option>
+        </select>
+        <button class="btn btn-sm btn-outline" onclick="clearAccountFilter()">清除</button>
+      </div>
+      <div id="accountList"><div class="empty"><div class="icon">📭</div>暂无账号<div class="hint">在上方输入 UID 或主页链接开始添加</div></div></div>
+    </div>
+  </div>
+
+  <!-- Tab 3: 爬取控制 -->
+  <div id="tab-crawl" class="tab">
+    <div class="stats-grid" id="overviewStats"></div>
+
+    <div class="card">
+      <h2>📋 爬取任务列表 <span style="font-weight:400;font-size:12px;color:var(--sub)" id="taskCount"></span></h2>
+      <div style="margin-bottom:12px">
+        <button class="btn btn-primary" onclick="openTaskCreateModal()">➕ 添加任务</button>
+      </div>
+      <div id="taskList"><div class="empty">暂无爬取任务，请在上方添加</div></div>
+    </div>
+
+    <div class="card">
+      <h2>📜 爬取记录</h2>
+      <div class="form-row" style="margin-bottom:10px">
+        <input id="logFilterTaskId" placeholder="任务ID" style="width:70px;flex:0 0 auto">
+        <select id="logFilterStatus" style="width:90px;flex:0 0 auto">
+          <option value="">全部状态</option><option value="success">成功</option><option value="error">失败</option>
+        </select>
+        <input id="logFilterKeyword" placeholder="搜索UID/任务名..." style="width:140px;flex:0 0 auto;font-size:12px">
+        <input type="date" id="logFilterStart" style="width:130px;flex:0 0 auto;font-size:12px" title="开始日期">
+        <input type="date" id="logFilterEnd" style="width:130px;flex:0 0 auto;font-size:12px" title="结束日期">
+        <button class="btn btn-sm btn-accent" onclick="loadCrawlLogs()">🔍 搜索</button>
+        <button class="btn btn-sm btn-outline" onclick="clearLogFilter()">清除</button>
+        <span style="font-size:12px;color:var(--sub);margin-left:auto">条数:
+          <input id="logFilterLimit" type="number" value="50" min="10" max="200" style="width:50px;text-align:center">
+        </span>
+      </div>
+      <div id="crawlLogs"><div class="empty">暂无日志</div></div>
+    </div>
+  </div>
+
+  <!-- Tab 4: 数据搜索 -->
+  <div id="tab-search" class="tab">
+    <div class="card">
+      <h2>🔍 搜索微博</h2>
+      <div class="form-row">
+        <select id="searchGroup" style="flex:0.8" onchange="onGroupFilterChange()"><option value="">全部分组</option></select>
+        <select id="searchTag" style="flex:0.8"><option value="">全部标签</option></select>
+        <select id="searchType" style="flex:0.7">
+          <option value="">全部类型</option>
+          <option value="original">原创</option>
+          <option value="repost">转发</option>
+          <option value="article">文章</option>
+          <option value="image">图片</option>
+          <option value="video">视频</option>
+        </select>
+        <input id="searchKeyword" placeholder="关键词" style="flex:1.2">
+        <input type="date" id="searchStart" style="flex:0.9" title="发帖起始">
+        <input type="date" id="searchEnd" style="flex:0.9" title="发帖截止">
+        <button class="btn btn-accent" onclick="searchPosts(1)">搜索</button>
+        <button class="btn btn-outline" onclick="exportCSV()">📥 导出</button>
+      </div>
+    </div>
+
+    <div class="stats-grid" id="searchStats" style="display:none"></div>
+    <div id="searchResults"><div class="empty">输入条件后点击搜索</div></div>
+    <div id="searchPager" style="text-align:center;margin-top:12px"></div>
+  </div>
+
+  <!-- Tab 5: 系统日志 -->
+  <div id="tab-logs" class="tab">
+    <div class="card">
+      <h2>📋 系统日志</h2>
+      <div class="form-row">
+        <select id="logLevel" style="flex:0.5">
+          <option value="">全部级别</option>
+          <option value="ERROR">ERROR</option>
+          <option value="WARNING">WARNING</option>
+          <option value="INFO">INFO</option>
+          <option value="DEBUG">DEBUG</option>
+        </select>
+        <select id="logModule" style="flex:0.5">
+          <option value="">全部模块</option>
+          <option value="weibo.app">app</option>
+          <option value="weibo.login">login</option>
+          <option value="weibo.crawler">crawler</option>
+          <option value="weibo.scheduler">scheduler</option>
+        </select>
+        <input id="logKeyword" placeholder="关键词搜索" style="flex:1.5">
+        <button class="btn btn-accent" onclick="loadLogs()">查询</button>
+        <button class="btn btn-outline btn-sm" onclick="toggleLogAutoRefresh()" id="btnLogAuto">🔄 自动刷新</button>
+        <span style="font-size:12px;color:var(--sub)">行数:
+          <input id="logLines" type="number" value="200" min="10" max="1000" style="width:60px;text-align:center">
+        </span>
+      </div>
+    </div>
+
+    <div id="logContainer" class="log-terminal">
+      <div class="empty" style="color:#565f89">点击查询加载日志</div>
+    </div>
+  </div>
+</main>
+
+<script>
+// ── 全局状态 ────────────────────────────────────
+let currentTab = "tab-credentials";
+let searchPage = 1;
+
+// ── 工具函数 ────────────────────────────────────
+function showToast(msg, type="info") {
+  const t = document.createElement("div");
+  t.className = `toast ${type}`;
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 3000);
+}
+
+function $(id) { return document.getElementById(id); }
+
+function fmtTime(t) {
+  if (!t) return "";
+  // Handle both ISO and "Thu Jun 11 ..." formats
+  const d = new Date(t);
+  if (isNaN(d.getTime())) return t;
+  return d.toLocaleString("zh-CN");
+}
+
+function fmtShortTime(t) {
+  if (!t) return "";
+  // 直接截取，不做时区转换（数据库存的是本地时间）
+  if (t.length >= 16) return t.slice(0, 16);
+  if (t.length >= 10) return t.slice(0, 10);
+  return t;
+}
+
+// ── Tab 切换 ────────────────────────────────────
+document.querySelectorAll("nav button").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll("nav button").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    currentTab = btn.dataset.tab;
+    document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+    $(currentTab).classList.add("active");
+    refreshCurrentTab();
+  });
+});
+
+function refreshCurrentTab() {
+  switch(currentTab) {
+    case "tab-accounts": loadAccounts(); break;
+    case "tab-credentials": loadCredStatus(); break;
+    case "tab-search": loadSearchFilters(); break;
+    case "tab-crawl": loadCrawlStatus(); break;
+    case "tab-logs": loadLogs(); break;
+  }
+}
+
+// ── 账号管理 ────────────────────────────────────
+let _allAccounts = [];
+let _allGroups = [];
+let _allTags = [];
+
+async function loadAccounts() {
+  try {
+    const [accR, grpR, tagR] = await Promise.all([
+      fetch("/api/accounts"),
+      fetch("/api/groups"),
+      fetch("/api/tags")
+    ]);
+    const acc = await accR.json();
+    const grp = await grpR.json();
+    const tag = await tagR.json();
+
+    if (acc.ok) { _allAccounts = acc.data; renderAccounts(); }
+    if (grp.ok) { _allGroups = grp.data; renderGroups(); renderFilterDropdowns(); }
+    if (tag.ok) { _allTags = tag.data; renderTags(); renderFilterDropdowns(); }
+  } catch(e) { showToast("加载失败: "+e.message, "error"); }
+}
+
+function renderFilterDropdowns() {
+  let gOpts = '<option value="">全部分组</option>';
+  for (const g of _allGroups) gOpts += `<option value="${g.id}">${g.name}</option>`;
+  $("filterGroup").innerHTML = gOpts;
+
+  let tOpts = '<option value="">全部标签</option>';
+  for (const t of _allTags) tOpts += `<option value="${t.id}">${t.name}</option>`;
+  $("filterTag").innerHTML = tOpts;
+}
+
+function filterAccounts() {
+  let list = [..._allAccounts];
+  const gid = $("filterGroup").value;
+  const tid = $("filterTag").value;
+  const kw = $("filterKeyword").value.trim().toLowerCase();
+  const status = $("filterStatus").value;
+
+  if (gid) list = list.filter(a => a.group_id == gid);
+  if (tid) list = list.filter(a => (a.tags||[]).some(t => t.id == tid));
+  if (kw) list = list.filter(a => (a.screen_name||'').toLowerCase().includes(kw) || a.uid.includes(kw));
+  if (status) list = list.filter(a => a.status == parseInt(status));
+
+  renderAccounts(list);
+}
+
+function clearAccountFilter() {
+  $("filterGroup").value = "";
+  $("filterTag").value = "";
+  $("filterKeyword").value = "";
+  $("filterStatus").value = "";
+  renderAccounts();
+}
+
+function renderAccounts(accounts) {
+  const data = accounts || _allAccounts;
+  if (!data.length) {
+    $("accountList").innerHTML = '<div class="empty"><div class="icon">📭</div>暂无账号，请添加</div>';
+    $("accountCount").textContent = '';
+    return;
+  }
+  $("accountCount").textContent = `(${data.length} 个)`;
+  let html = '<table><thead><tr><th>昵称</th><th>UID</th><th>分组</th><th>标签</th><th>微博数</th><th>状态</th><th>操作</th></tr></thead><tbody>';
+  for (const a of data) {
+    const tags = a.tags || [];
+    const tagsHtml = tags.length
+      ? tags.map(t => `<span class="tag tag-info" style="margin:1px;cursor:pointer" onclick="removeAccountTag('${a.uid}',${t.id})" title="点击移除">${t.name} ✕</span>`).join('')
+      : '<span style="color:var(--sub);font-size:11px">—</span>';
+    html += `<tr id="row-${a.uid}">
+      <td><strong>${a.screen_name || "—"}</strong></td>
+      <td><code style="font-size:11px">${a.uid}</code></td>
+      <td>
+        <select onchange="setAccountGroup('${a.uid}',this.value)" style="font-size:11px;padding:2px 4px">
+          <option value="">—</option>
+          ${_allGroups.map(g => `<option value="${g.id}" ${a.group_id===g.id?'selected':''}>${g.name}</option>`).join('')}
+        </select>
+      </td>
+      <td>${tagsHtml} <span style="position:relative;display:inline-block">
+        <input class="tag-search-input" placeholder="＋" style="width:22px;padding:1px 4px;font-size:11px;border:1px dashed var(--border);border-radius:4px;background:transparent;cursor:pointer;transition:all .2s"
+          onfocus="openTagSearch(this,'${a.uid}')" oninput="filterTagSuggestions(this)" onblur="closeTagSearch(this)" data-uid="${a.uid}">
+        <div class="tag-suggestions" style="display:none;position:absolute;top:100%;left:0;z-index:99;background:#fff;border:1px solid var(--border);border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,.1);min-width:140px;max-height:200px;overflow:auto"></div>
+      </span></td>
+      <td>${a.post_count || 0}</td>
+      <td><span class="tag ${a.status===1?'tag-success':'tag-danger'}">${a.status===1?'启用':'停用'}</span></td>
+      <td style="white-space:nowrap">
+        <button class="btn btn-sm btn-outline" onclick="openAccountDetail('${a.uid}')">编辑</button>
+        <button class="btn btn-sm ${a.status===1?'btn-outline':'btn-success'}" onclick="toggleAccount('${a.uid}',${a.status===1?'0':'1'})">${a.status===1?'停用':'启用'}</button>
+        <button class="btn btn-sm btn-danger" onclick="deleteAccount('${a.uid}')">删除</button>
+      </td></tr>`;
+  }
+  html += "</tbody></table>";
+  $("accountList").innerHTML = html;
+
+  // 同步更新添加账号的分组下拉
+  let opts = '<option value="">无分组</option>';
+  for (const g of _allGroups) opts += `<option value="${g.id}">${g.name}</option>`;
+  $("addGroup").innerHTML = opts;
+}
+
+async function addAccount() {
+  const raw = $("addUid").value.trim();
+  if (!raw) { showToast("请输入 UID 或链接", "error"); return; }
+  const group_id = $("addGroup").value || null;
+  try {
+    const r = await fetch("/api/accounts", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({uid: raw, group_id})
+    });
+    const d = await r.json();
+    if (d.ok) { showToast("添加成功: "+(d.data.screen_name||d.data.uid), "success"); $("addUid").value=""; loadAccounts(); }
+    else { showToast(d.error, "error"); }
+  } catch(e) { showToast("添加失败: "+e.message, "error"); }
+}
+
+async function deleteAccount(uid) {
+  if (!confirm(`确定删除 ${uid} 及其所有数据？`)) return;
+  try {
+    const r = await fetch(`/api/accounts/${uid}`, {method:"DELETE"});
+    const d = await r.json();
+    if (d.ok) { showToast("删除成功", "success"); loadAccounts(); }
+    else { showToast(d.error, "error"); }
+  } catch(e) { showToast("删除失败: "+e.message, "error"); }
+}
+
+async function toggleAccount(uid, status) {
+  try {
+    const r = await fetch(`/api/accounts/${uid}/status`, {
+      method:"PUT", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({status: parseInt(status)})
+    });
+    const d = await r.json();
+    if (d.ok) { showToast(d.message, "success"); loadAccounts(); }
+    else { showToast(d.error, "error"); }
+  } catch(e) { showToast("操作失败: "+e.message, "error"); }
+}
+
+async function setAccountGroup(uid, groupId) {
+  try {
+    await fetch(`/api/accounts/${uid}/group`, {
+      method:"PUT", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({group_id: groupId ? parseInt(groupId) : null})
+    });
+  } catch(e) {}
+}
+
+// ── 分组管理 ────────────────────────────────────
+function renderGroups() {
+  if (!_allGroups.length) {
+    $("groupList").innerHTML = '<span style="color:var(--sub)">暂无分组</span>';
+    return;
+  }
+  $("groupList").innerHTML = _allGroups.map(g =>
+    `<span class="tag" style="margin:2px;display:inline-block;font-size:12px">${g.name} (${g.account_count}) <a href="#" onclick="deleteGroup(${g.id});return false" style="color:var(--danger);margin-left:2px">✕</a></span>`
+  ).join('');
+}
+
+async function addGroup() {
+  const name = $("newGroupName").value.trim();
+  if (!name) { showToast("请输入分组名", "error"); return; }
+  try {
+    const r = await fetch("/api/groups", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({name})
+    });
+    const d = await r.json();
+    if (d.ok) { showToast("分组已创建", "success"); $("newGroupName").value=""; loadAccounts(); }
+    else { showToast(d.error, "error"); }
+  } catch(e) { showToast("创建失败: "+e.message, "error"); }
+}
+
+async function deleteGroup(id) {
+  if (!confirm("删除分组不会删除账号，仅取消分组关联。确定？")) return;
+  try {
+    await fetch(`/api/groups/${id}`, {method:"DELETE"});
+    showToast("分组已删除", "success");
+    loadAccounts();
+  } catch(e) { showToast("删除失败: "+e.message, "error"); }
+}
+
+// ── 标签管理 ────────────────────────────────────
+function renderTags() {
+  if (!_allTags.length) {
+    $("tagList").innerHTML = '<span style="color:var(--sub)">暂无标签</span>';
+    return;
+  }
+  $("tagList").innerHTML = _allTags.map(t =>
+    `<span class="tag tag-info" style="cursor:pointer" title="${t.account_count}个账号">${t.name} <a href="#" onclick="deleteTag(${t.id});return false" style="color:var(--danger);margin-left:2px">✕</a></span>`
+  ).join('');
+}
+
+async function addTag() {
+  const name = $("newTagName").value.trim();
+  if (!name) { showToast("请输入标签名", "error"); return; }
+  try {
+    const r = await fetch("/api/tags", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({name})
+    });
+    const d = await r.json();
+    if (d.ok) { showToast("标签已创建", "success"); $("newTagName").value=""; loadAccounts(); }
+    else { showToast(d.error, "error"); }
+  } catch(e) { showToast("创建失败: "+e.message, "error"); }
+}
+
+async function deleteTag(id) {
+  if (!confirm("确定删除此标签？")) return;
+  try {
+    await fetch(`/api/tags/${id}`, {method:"DELETE"});
+    showToast("标签已删除", "success");
+    loadAccounts();
+  } catch(e) { showToast("删除失败: "+e.message, "error"); }
+}
+
+// ── 账号标签关联 ──────────────────────────────────
+function openTagSearch(input, uid) {
+  input.style.width = "120px";
+  input.placeholder = "搜索标签...";
+  input.style.cursor = "text";
+  input.style.border = "1px solid var(--accent)";
+  input.value = "";
+  input.dataset.uid = uid;
+  filterTagSuggestions(input);
+}
+
+function closeTagSearch(input) {
+  setTimeout(() => {
+    input.style.width = "22px";
+    input.placeholder = "＋";
+    input.style.cursor = "pointer";
+    input.style.border = "1px dashed var(--border)";
+    input.value = "";
+    const dd = input.nextElementSibling;
+    if (dd) dd.style.display = "none";
+  }, 200);
+}
+
+function filterTagSuggestions(input) {
+  const kw = input.value.trim().toLowerCase();
+  const uid = input.dataset.uid;
+  const dd = input.nextElementSibling;
+  if (!dd) return;
+
+  const currentIds = [];
+  // 收集当前行已有标签的 id
+  const row = input.closest("tr");
+  if (row) {
+    row.querySelectorAll(".tag.tag-info").forEach(el => {
+      const onclick = el.getAttribute("onclick") || "";
+      const m = onclick.match(/removeAccountTag\('[^']+',(\d+)\)/);
+      if (m) currentIds.push(parseInt(m[1]));
+    });
+  }
+
+  const available = _allTags.filter(t => !currentIds.includes(t.id) && (!kw || t.name.toLowerCase().includes(kw)));
+  if (!available.length) {
+    dd.innerHTML = '<div style="padding:6px 10px;font-size:12px;color:var(--sub)">' + (kw ? '无匹配' : '已全部打标') + '</div>';
+    dd.style.display = "block";
+    return;
+  }
+
+  dd.innerHTML = available.map(t =>
+    `<div style="padding:5px 10px;font-size:12px;cursor:pointer;white-space:nowrap" 
+          onmousedown="addAccountTag('${uid}',${t.id},'${t.name}')"
+          onmouseover="this.style.background='#f0f4ff'"
+          onmouseout="this.style.background=''">${t.name}</div>`
+  ).join('');
+  dd.style.display = "block";
+}
+
+async function addAccountTag(uid, tagId, tagName) {
+  const r = await fetch(`/api/accounts/${uid}/tags`);
+  const d = await r.json();
+  if (!d.ok) return;
+  const ids = d.data.map(t => t.id);
+  if (!ids.includes(tagId)) ids.push(tagId);
+  await fetch(`/api/accounts/${uid}/tags`, {
+    method:"PUT", headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({tag_ids: ids})
+  });
+  loadAccounts();
+}
+
+async function removeAccountTag(uid, tagId) {
+  const r = await fetch(`/api/accounts/${uid}/tags`);
+  const d = await r.json();
+  if (!d.ok) return;
+  const newIds = d.data.filter(t => t.id !== tagId).map(t => t.id);
+  await fetch(`/api/accounts/${uid}/tags`, {
+    method:"PUT", headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({tag_ids: newIds})
+  });
+  loadAccounts();
+}
+
+
+// ── 账号详情弹窗 ──────────────────────────────────
+async function openAccountDetail(uid) {
+  try {
+    const r = await fetch(`/api/accounts/${uid}`);
+    const d = await r.json();
+    if (!d.ok) { showToast("加载失败", "error"); return; }
+    const a = d.data;
+    const tags = a.tags || [];
+
+    const overlay = document.createElement("div");
+    overlay.className = "modal-overlay";
+    overlay.innerHTML = `<div class="modal-box">
+      <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">✕</button>
+      <h3 style="margin:0 0 16px;font-size:16px;font-weight:600">账号详情</h3>
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+        ${a.avatar ? `<img src="${a.avatar}" width="48" height="48" style="border-radius:50%">` : ''}
+        <div>
+          <div style="font-weight:600;font-size:15px">${a.screen_name || '未获取'}</div>
+          <div style="color:var(--sub);font-size:12px">UID: ${a.uid}</div>
+          <div style="color:var(--sub);font-size:12px">加入: ${fmtShortTime(a.created_at)}</div>
+        </div>
+      </div>
+
+      <div style="margin-bottom:12px">
+        <label style="font-size:12px;color:var(--sub);display:block;margin-bottom:4px">分组</label>
+        <select id="detailGroup" style="width:100%">
+          <option value="">无分组</option>
+          ${_allGroups.map(g => `<option value="${g.id}" ${a.group_id===g.id?'selected':''}>${g.name}</option>`).join('')}
+        </select>
+      </div>
+
+      <div style="margin-bottom:12px">
+        <label style="font-size:12px;color:var(--sub);display:block;margin-bottom:4px">标签</label>
+        <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px" id="detailTags">
+          ${tags.map(t => `<span class="tag tag-info" style="cursor:pointer" onclick="this.remove();">${t.name} <input type="hidden" name="detailTagId" value="${t.id}"></span>`).join('')}
+        </div>
+        <div style="position:relative">
+          <input id="detailTagSearch" placeholder="搜索添加标签..." style="width:100%;font-size:12px"
+            oninput="filterDetailTags()" onfocus="filterDetailTags()" onblur="setTimeout(()=>document.getElementById('detailTagDD').style.display='none',200)">
+          <div id="detailTagDD" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid var(--border);border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,.1);max-height:160px;overflow:auto;z-index:10"></div>
+        </div>
+      </div>
+
+      <div style="margin-bottom:16px">
+        <label style="font-size:12px;color:var(--sub);display:block;margin-bottom:4px">备注</label>
+        <textarea id="detailRemark" style="width:100%;min-height:60px;font-size:13px" placeholder="添加备注...">${a.remark || ''}</textarea>
+      </div>
+
+      <div style="text-align:right">
+        <button class="btn btn-outline btn-sm" onclick="this.closest('.modal-overlay').remove()">取消</button>
+        <button class="btn btn-primary btn-sm" onclick="saveAccountDetail('${uid}')" style="margin-left:8px">保存</button>
+      </div>
+    </div>`;
+    document.body.appendChild(overlay);
+    overlay.addEventListener("click", e => { if (e.target === overlay) overlay.remove(); });
+  } catch(e) { showToast("加载失败: "+e.message, "error"); }
+}
+
+function filterDetailTags() {
+  const kw = ($("detailTagSearch")?.value || "").trim().toLowerCase();
+  const dd = $("detailTagDD");
+  if (!dd) return;
+  const existing = [...document.querySelectorAll("#detailTags input[name='detailTagId']")].map(el => parseInt(el.value));
+  const available = _allTags.filter(t => !existing.includes(t.id) && (!kw || t.name.toLowerCase().includes(kw)));
+  dd.innerHTML = available.length
+    ? available.map(t => `<div style="padding:5px 10px;font-size:12px;cursor:pointer" onmousedown="addDetailTag(${t.id},'${t.name}')" onmouseover="this.style.background='#f0f4ff'" onmouseout="this.style.background=''">${t.name}</div>`).join('')
+    : '<div style="padding:5px 10px;font-size:12px;color:var(--sub)">无匹配</div>';
+  dd.style.display = "block";
+}
+
+function addDetailTag(id, name) {
+  const container = $("detailTags");
+  if (!container) return;
+  const span = document.createElement("span");
+  span.className = "tag tag-info";
+  span.style.cursor = "pointer";
+  span.innerHTML = `${name} <input type="hidden" name="detailTagId" value="${id}">`;
+  span.onclick = () => span.remove();
+  container.appendChild(span);
+  $("detailTagSearch").value = "";
+  $("detailTagDD").style.display = "none";
+}
+
+async function saveAccountDetail(uid) {
+  const group_id = $("detailGroup").value || null;
+  const remark = $("detailRemark").value;
+  const tagIds = [...document.querySelectorAll("#detailTags input[name='detailTagId']")].map(el => parseInt(el.value));
+  try {
+    await fetch(`/api/accounts/${uid}`, {
+      method:"PUT", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({group_id: group_id ? parseInt(group_id) : null, remark, tag_ids: tagIds})
+    });
+    document.querySelector(".modal-overlay")?.remove();
+    showToast("已保存", "success");
+    loadAccounts();
+  } catch(e) { showToast("保存失败: "+e.message, "error"); }
+}
+
+// ── 二维码登录 ────────────────────────────────────
+let qrcodePollTimer = null;
+
+async function startQrcodeLogin() {
+  $("loginStatus").innerHTML = '<span class="spinner"></span>正在生成二维码...';
+  $("qrcodeContainer").style.display = "none";
+
+  try {
+    const r = await fetch("/api/login/qrcode", {method:"POST"});
+    const d = await r.json();
+    if (d.ok && d.qrcode) {
+      $("qrcodeImg").src = "data:image/png;base64," + d.qrcode;
+      $("qrcodeContainer").style.display = "block";
+      $("qrcodeHint").textContent = "请使用微博 App 扫描二维码";
+      $("loginStatus").innerHTML = '<span class="status-dot yellow"></span>等待扫码中...';
+
+      // 开始轮询状态
+      pollQrcodeStatus();
+    } else {
+      $("loginStatus").innerHTML = '<span class="status-dot red"></span>' + (d.error || "获取二维码失败");
+      showToast(d.error || "获取二维码失败", "error");
+    }
+  } catch(e) {
+    $("loginStatus").innerHTML = '<span class="status-dot red"></span>请求失败';
+    showToast("请求失败: "+e.message, "error");
+  }
+}
+
+async function pollQrcodeStatus() {
+  if (qrcodePollTimer) clearTimeout(qrcodePollTimer);
+
+  try {
+    const r = await fetch("/api/login/qrcode/status");
+    const d = await r.json();
+    if (!d.ok) return;
+
+    const s = d.data;
+    if (s.status === "success") {
+      $("qrcodeHint").textContent = "✅ " + s.message;
+      $("loginStatus").innerHTML = '<span class="status-dot green"></span>登录成功！Cookie 已保存';
+      showToast("登录成功！", "success");
+      loadCredStatus();
+      return;
+    } else if (s.status === "expired") {
+      $("qrcodeHint").textContent = "⚠️ " + s.message;
+      $("loginStatus").innerHTML = '<span class="status-dot red"></span>二维码已过期，请重新获取';
+      showToast(s.message || "二维码已过期", "error");
+      return;
+    } else if (s.status === "failed") {
+      $("qrcodeHint").textContent = "❌ " + (s.message || "登录失败");
+      $("loginStatus").innerHTML = '<span class="status-dot red"></span>登录失败';
+      return;
+    }
+
+    // 仍在等待，继续轮询
+    qrcodePollTimer = setTimeout(pollQrcodeStatus, 2000);
+
+  } catch(e) {
+    qrcodePollTimer = setTimeout(pollQrcodeStatus, 3000);
+  }
+}
+
+async function cancelQrcodeLogin() {
+  if (qrcodePollTimer) clearTimeout(qrcodePollTimer);
+  $("qrcodeContainer").style.display = "none";
+  $("loginStatus").innerHTML = "";
+  try {
+    await fetch("/api/login/qrcode", {method:"DELETE"});
+  } catch(e) {}
+}
+
+async function loadCredStatus() {
+  try {
+    const r = await fetch("/api/credentials");
+    const d = await r.json();
+    if (!d.ok) return;
+    const cred = d.data;
+    let html = '<table><tbody>';
+    html += `<tr><td width="100">Cookie</td><td><code style="word-break:break-all;font-size:11px">${cred?.cookie || "无"}</code></td></tr>`;
+    html += `<tr><td width="100">登录状态</td><td>`;
+    if (d.has_cookie) {
+      if (d.cookie_valid) html += '<span class="status-dot green"></span>Cookie 有效 ✅ 可正常爬取';
+      else html += '<span class="status-dot red"></span>Cookie 已过期 ❌ 请重新扫码登录';
+    } else {
+      html += '<span class="status-dot yellow"></span>未登录 — 请扫码登录';
+    }
+    html += `</td></tr></tbody></table>`;
+    $("credStatus").innerHTML = html;
+
+    if (d.cookie_valid) {
+      $("loginStatus").innerHTML = '<span class="status-dot green"></span>已登录，可正常爬取';
+    }
+  } catch(e) {}
+}
+
+// ── 搜索 ────────────────────────────────────────
+
+// ── 搜索 ────────────────────────────────────────
+async function loadSearchFilters() {
+  try {
+    const [grpR, tagR] = await Promise.all([
+      fetch("/api/groups"),
+      fetch("/api/tags")
+    ]);
+    const grp = await grpR.json();
+    const tag = await tagR.json();
+
+    // 分组下拉
+    if (grp.ok) {
+      let opts = '<option value="">全部分组</option>';
+      for (const g of grp.data) {
+        if (g.account_count > 0) opts += `<option value="${g.id}">${g.name} (${g.account_count})</option>`;
+      }
+      $("searchGroup").innerHTML = opts;
+    }
+    // 标签下拉
+    if (tag.ok) {
+      let opts = '<option value="">全部标签</option>';
+      for (const t of tag.data) {
+        if (t.account_count > 0) opts += `<option value="${t.id}">${t.name} (${t.account_count})</option>`;
+      }
+      $("searchTag").innerHTML = opts;
+    }
+  } catch(e) { /* ignore */ }
+}
+
+function onGroupFilterChange() {
+  // 分组变化时不需要联动，搜索时直接用 group_id
+}
+
+async function searchPosts(page=1) {
+  searchPage = page;
+  const params = new URLSearchParams();
+  const gid = $("searchGroup").value; if (gid) params.set("group_id", gid);
+  const tid = $("searchTag").value; if (tid) params.set("tag_id", tid);
+  const pt = $("searchType").value; if (pt) params.set("post_type", pt);
+  const kw = $("searchKeyword").value.trim(); if (kw) params.set("keyword", kw);
+  const st = $("searchStart").value; if (st) params.set("start_time", st+" 00:00:00");
+  const et = $("searchEnd").value; if (et) params.set("end_time", et+" 23:59:59");
+  params.set("page", page);
+  params.set("page_size", "20");
+
+  try {
+    const r = await fetch(`/api/posts?${params}`);
+    const d = await r.json();
+    if (!d.ok) { showToast(d.error, "error"); return; }
+    renderSearchResults(d.data);
+  } catch(e) { showToast("搜索失败: "+e.message, "error"); }
+}
+
+function renderSearchResults(result) {
+  // Stats
+  $("searchStats").style.display = "grid";
+  $("searchStats").innerHTML = `
+    <div class="stat-card"><div class="num">${result.total}</div><div class="label">搜索结果</div></div>
+    <div class="stat-card"><div class="num">${result.page}</div><div class="label">当前页 / ${result.total_pages} 页</div></div>`;
+
+  if (!result.data.length) {
+    $("searchResults").innerHTML = '<div class="empty"><div class="icon">🔍</div>无匹配结果</div>';
+    $("searchPager").innerHTML = "";
+    return;
+  }
+
+  let html = "";
+  for (const p of result.data) {
+    const pics = parsePics(p.pics);
+    const picsHtml = pics.length ? pics.map(u => `<img src="${u}" style="max-width:80px;max-height:80px;margin:2px;border-radius:4px">`).join("") : "";
+    html += `<div class="post-card">
+      <div class="post-meta" style="margin-bottom:4px">
+        <strong>${p.screen_name || p.uid}</strong>
+        ${p.post_type ? `<span class="tag tag-info" style="font-size:10px">${({original:'原创',repost:'转发',article:'文章',image:'图片',video:'视频'})[p.post_type]||p.post_type}</span>` : ''}
+        <span>🕐 ${fmtShortTime(p.created_at)}</span>
+        <span>📱 ${p.source||"未知"}</span>
+        <span>↩${p.reposts_count} 💬${p.comments_count} ❤${p.attitudes_count}</span>
+        ${p.is_long_text?'<span class="tag tag-info">长文</span>':''}
+      </div>
+      <div class="post-preview">${p.text||"(无文本)"}</div>
+      ${picsHtml ? '<div style="margin:4px 0">'+picsHtml+'</div>' : ''}
+      <a href="${p.url}" target="_blank" style="font-size:11px;color:var(--accent)">查看原文 →</a>
+    </div>`;
+  }
+  $("searchResults").innerHTML = html;
+
+  // Pager
+  let pager = "";
+  for (let i=1; i<=result.total_pages; i++) {
+    if (i === result.page) pager += `<button class="btn btn-sm btn-primary" style="margin:2px">${i}</button>`;
+    else pager += `<button class="btn btn-sm btn-outline" style="margin:2px" onclick="searchPosts(${i})">${i}</button>`;
+  }
+  $("searchPager").innerHTML = pager;
+}
+
+function parsePics(picsStr) {
+  try { const arr = JSON.parse(picsStr); return Array.isArray(arr) ? arr : []; }
+  catch(e) { return []; }
+}
+
+async function exportCSV() {
+  const params = new URLSearchParams();
+  const gid = $("searchGroup").value; if (gid) params.set("group_id", gid);
+  const tid = $("searchTag").value; if (tid) params.set("tag_id", tid);
+  const pt = $("searchType").value; if (pt) params.set("post_type", pt);
+  const kw = $("searchKeyword").value.trim(); if (kw) params.set("keyword", kw);
+  const st = $("searchStart").value; if (st) params.set("start_time", st+" 00:00:00");
+  const et = $("searchEnd").value; if (et) params.set("end_time", et+" 23:59:59");
+
+  try {
+    const r = await fetch(`/api/export?${params}`);
+    if (!r.ok) { showToast("导出失败", "error"); return; }
+    const blob = await r.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = "weibo_export.csv";
+    a.click(); URL.revokeObjectURL(url);
+    showToast("导出成功", "success");
+  } catch(e) { showToast("导出失败: "+e.message, "error"); }
+}
+
+// ── 爬取控制 ────────────────────────────────────
+let _runningTasks = {};
+let _runPollTimer = null;
+
+async function loadCrawlStatus() {
+  try {
+    const [statsR, tasksR, accR] = await Promise.all([
+      fetch("/api/stats"),
+      fetch("/api/scheduler/tasks"),
+      fetch("/api/accounts")
+    ]);
+
+    const stats = await statsR.json();
+    if (stats.ok) {
+      const s = stats.data;
+      $("overviewStats").innerHTML = `
+        <div class="stat-card"><div class="num">${s.total_accounts}</div><div class="label">总账号</div></div>
+        <div class="stat-card"><div class="num">${s.active_accounts}</div><div class="label">启用中</div></div>
+        <div class="stat-card"><div class="num">${s.total_posts}</div><div class="label">已爬取微博</div></div>
+        <div class="stat-card"><div class="num">${s.latest_crawl ? fmtShortTime(s.latest_crawl) : "—"}</div><div class="label">最近爬取</div></div>`;
+    }
+
+    // 爬取日志
+    loadCrawlLogs();
+
+    // 爬取任务列表
+    const tasks = await tasksR.json();
+    if (tasks.ok) {
+      renderTasks(tasks.data);
+    }
+
+    // 任务添加下拉框
+    loadTaskAccounts();
+    loadTaskGroups();
+    loadTaskTags();
+
+    // 运行状态轮询
+    pollRunningTasks();
+  } catch(e) { console.error("loadCrawlStatus error:", e); }
+}
+
+// ── 添加任务弹窗 ────────────────────────────────
+let taskDim = "single";
+
+async function openTaskCreateModal() {
+  _selectedAccounts = {};  // 清空上次数选择
+  const overlay = document.createElement("div");
+  overlay.className = "modal-overlay";
+  overlay.innerHTML = `<div class="modal-box" style="min-width:500px">
+    <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">✕</button>
+    <h3 style="margin:0 0 16px;font-size:16px;font-weight:600">➕ 添加爬取任务</h3>
+
+    <div style="margin-bottom:12px">
+      <label style="font-size:12px;color:var(--sub);display:block;margin-bottom:4px">任务名称</label>
+      <input id="taskName" placeholder="留空则自动生成..." style="width:100%">
+    </div>
+
+    <div style="display:flex;gap:4px;margin-bottom:12px">
+      <button class="btn btn-sm btn-accent task-dim-btn active" data-dim="single" onclick="switchTaskDim('single')">按账号</button>
+      <button class="btn btn-sm btn-outline task-dim-btn" data-dim="group" onclick="switchTaskDim('group')">按分组</button>
+      <button class="btn btn-sm btn-outline task-dim-btn" data-dim="tag" onclick="switchTaskDim('tag')">按标签</button>
+    </div>
+
+    <div id="taskDimSingle" style="margin-bottom:8px;position:relative">
+      <div id="taskSelectedChips" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px"></div>
+      <input id="taskAccountSearch" placeholder="搜索并勾选账号..." style="width:100%"
+        oninput="filterTaskAccounts()" onfocus="filterTaskAccounts()" onblur="setTimeout(()=>$('taskAccountDD').style.display='none',150)" autocomplete="off">
+      <div id="taskAccountDD" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--card);border:1px solid var(--border);border-radius:6px;box-shadow:0 8px 25px rgba(0,0,0,.15);max-height:180px;overflow:auto;z-index:100" onmousedown="event.preventDefault()"></div>
+      <input type="hidden" id="taskAccount" value="">
+    </div>
+    <div id="taskDimGroup" style="display:none;margin-bottom:8px">
+      <select id="taskGroup" style="width:100%"><option value="">选择分组...</option></select>
+    </div>
+    <div id="taskDimTag" style="display:none;margin-bottom:8px">
+      <select id="taskTag" style="width:100%"><option value="">选择标签...</option></select>
+    </div>
+
+    <div class="form-row">
+      <span style="font-size:13px">每</span>
+      <input id="taskInterval" type="number" value="360" min="1" max="4320" style="width:70px;text-align:center">
+      <span style="font-size:13px">分钟</span>
+      <label style="font-size:12px;margin-left:8px"><input type="checkbox" id="taskOneTime" onchange="toggleOneTime()"> 单次执行</label>
+    </div>
+
+    <div style="margin:12px 0">
+      <span style="font-size:12px;color:var(--sub);display:block;margin-bottom:4px">帖子类型</span>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <label style="font-size:12px"><input type="checkbox" class="task-post-type" value="original" checked> 原创</label>
+        <label style="font-size:12px"><input type="checkbox" class="task-post-type" value="repost" checked> 转发</label>
+        <label style="font-size:12px"><input type="checkbox" class="task-post-type" value="article" checked> 文章</label>
+        <label style="font-size:12px"><input type="checkbox" class="task-post-type" value="image" checked> 图片</label>
+        <label style="font-size:12px"><input type="checkbox" class="task-post-type" value="video" checked> 视频</label>
+      </div>
+    </div>
+
+    <div style="margin:12px 0">
+      <span style="font-size:12px;color:var(--sub);display:block;margin-bottom:4px">快捷批量</span>
+      <div id="quickGroupBtns" style="font-size:12px"></div>
+      <div id="quickTagBtns" style="margin-top:4px;font-size:12px"></div>
+    </div>
+
+    <div style="text-align:right;margin-top:16px">
+      <button class="btn btn-outline btn-sm" onclick="this.closest('.modal-overlay').remove()">取消</button>
+      <button class="btn btn-primary btn-sm" onclick="addCrawlTask()" style="margin-left:8px">创建任务</button>
+    </div>
+  </div>`;
+  document.body.appendChild(overlay);
+  overlay.addEventListener("click", e => { if (e.target === overlay) overlay.remove(); });
+
+  // 加载数据
+  loadTaskAccounts();
+  loadTaskGroups();
+  loadTaskTags();
+}
+
+function switchTaskDim(dim) {
+  taskDim = dim;
+  document.querySelectorAll(".task-dim-btn").forEach(b => {
+    b.classList.remove("btn-accent"); b.classList.add("btn-outline");
+  });
+  const activeBtn = document.querySelector(`.task-dim-btn[data-dim="${dim}"]`);
+  if (activeBtn) { activeBtn.classList.remove("btn-outline"); activeBtn.classList.add("btn-accent"); }
+  const els = { single: "taskDimSingle", group: "taskDimGroup", tag: "taskDimTag" };
+  for (const [k, id] of Object.entries(els)) {
+    const el = $(id); if (el) el.style.display = k === dim ? "block" : "none";
+  }
+}
+
+function toggleOneTime() {
+  const checked = $("taskOneTime")?.checked;
+  const inp = $("taskInterval");
+  if (inp) { inp.disabled = checked; inp.style.opacity = checked ? "0.4" : "1"; }
+}
+
+async function addCrawlTask() {
+  const interval = parseInt($("taskInterval").value) || 360;
+  const postTypes = [...document.querySelectorAll(".task-post-type:checked")].map(cb => cb.value);
+  const isOneTime = $("taskOneTime")?.checked || false;
+  const name = ($("taskName")?.value || "").trim();
+  let body = { interval, post_types: postTypes, is_one_time: isOneTime };
+  if (name) body.name = name;
+
+  if (taskDim === "single") {
+    const uids = Object.keys(_selectedAccounts);
+    if (!uids.length) { showToast("请勾选目标账号", "error"); return; }
+    body.uids = uids;
+  } else if (taskDim === "group") {
+    const gid = $("taskGroup").value;
+    if (!gid) { showToast("请选择分组", "error"); return; }
+    body.group_id = parseInt(gid);
+  } else {
+    const tid = $("taskTag").value;
+    if (!tid) { showToast("请选择标签", "error"); return; }
+    body.tag_id = parseInt(tid);
+  }
+
+  try {
+    const r = await fetch("/api/scheduler/tasks", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(body) });
+    const d = await r.json();
+    if (d.ok) {
+      document.querySelector(".modal-overlay")?.remove();
+      showToast(d.message, "success"); loadCrawlStatus();
+    } else {
+      showToast(d.message || d.error || "创建失败", "error");
+    }
+  } catch(e) { showToast("创建失败: "+e.message, "error"); }
+}
+
+async function quickAddByDim(dim, id, label) {
+  const interval = parseInt($("taskInterval").value) || 360;
+  const postTypes = [...document.querySelectorAll(".task-post-type:checked")].map(cb => cb.value);
+  const isOneTime = $("taskOneTime")?.checked || false;
+  const name = ($("taskName")?.value || "").trim();
+  let body = { interval, post_types: postTypes, is_one_time: isOneTime };
+  if (name) body.name = name;
+  if (dim === "group") body.group_id = id;
+  else if (dim === "tag") body.tag_id = id;
+
+  showToast(`正在为 ${label} 批量添加任务...`, "info");
+  try {
+    const r = await fetch("/api/scheduler/tasks", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(body) });
+    const d = await r.json();
+    if (d.ok) {
+      document.querySelector(".modal-overlay")?.remove();
+      showToast(`[${label}] ${d.message}`, "success"); loadCrawlStatus();
+    } else {
+      showToast(d.message || d.error || "失败", "error");
+    }
+  } catch(e) { showToast("失败: "+e.message, "error"); }
+}
+
+async function pollRunningTasks() {
+  try {
+    const r = await fetch("/api/scheduler/running");
+    const d = await r.json();
+    if (d.ok) {
+      _runningTasks = {};
+      for (const t of d.data) _runningTasks[t.task_id] = t;
+      // 有运行中的任务时，重新渲染列表并继续轮询
+      const hasRunning = d.data.some(t => t.status === 'running');
+      if (hasRunning) {
+        // 重新加载任务列表以显示进度
+        const tasksR = await fetch("/api/scheduler/tasks");
+        const tasks = await tasksR.json();
+        if (tasks.ok) renderTasks(tasks.data);
+        _runPollTimer = setTimeout(pollRunningTasks, 2000);
+      } else {
+        // 全部完成，刷新一次后停止轮询
+        loadCrawlLogs();
+        const tasksR = await fetch("/api/scheduler/tasks");
+        const tasks = await tasksR.json();
+        if (tasks.ok) renderTasks(tasks.data);
+      }
+    }
+  } catch(e) { _runPollTimer = setTimeout(pollRunningTasks, 3000); }
+}
+
+let _cachedAccounts = [];
+let _selectedAccounts = {}; // uid → {uid, screen_name, avatar}
+
+async function loadTaskAccounts() {
+  try {
+    const r = await fetch("/api/accounts");
+    const d = await r.json();
+    if (d.ok) _cachedAccounts = d.data;
+    filterTaskAccounts();
+  } catch(e) { console.error("loadTaskAccounts:", e); }
+}
+
+function filterTaskAccounts() {
+  const kw = ($("taskAccountSearch")?.value || "").trim().toLowerCase();
+  const dd = $("taskAccountDD");
+  if (!dd) return;
+
+  let list = _cachedAccounts.filter(a => a.status === 1);
+  if (kw) list = list.filter(a => (a.screen_name||"").toLowerCase().includes(kw) || a.uid.includes(kw));
+
+  if (!list.length) {
+    dd.innerHTML = '<div style="padding:8px 12px;font-size:12px;color:var(--sub)">无匹配账号</div>';
+  } else {
+    dd.innerHTML = list.map(a => {
+      const checked = _selectedAccounts[a.uid] ? ' checked' : '';
+      return `<label style="display:flex;align-items:center;gap:8px;padding:7px 12px;cursor:pointer;font-size:13px;white-space:nowrap"
+             onmousedown="return false;" onmouseover="this.style.background='var(--primary-light)'" onmouseout="this.style.background=''">
+        <input type="checkbox" data-uid="${a.uid}" ${checked} onchange="toggleAccountSelection(this)" style="flex-shrink:0;margin:0">
+        <span>${a.screen_name||a.uid}</span><span style="color:var(--sub);font-size:11px;margin-left:auto">${a.uid}</span>
+      </label>`;
+    }).join('');
+  }
+  dd.style.display = "block";
+}
+
+function toggleAccountSelection(cb) {
+  const uid = cb.dataset.uid;
+  if (_selectedAccounts[uid]) {
+    delete _selectedAccounts[uid];
+  } else {
+    const a = _cachedAccounts.find(x => x.uid === uid);
+    _selectedAccounts[uid] = a ? { uid, screen_name: a.screen_name, avatar: a.avatar } : { uid, screen_name: uid, avatar: '' };
+  }
+  renderSelectedChips();
+}
+
+function renderSelectedChips() {
+  const container = $("taskSelectedChips");
+  if (!container) return;
+  const accounts = Object.values(_selectedAccounts);
+  container.innerHTML = accounts.map(a =>
+    `<span class="quick-tag" onclick="delete _selectedAccounts['${a.uid}'];renderSelectedChips()">
+      ${a.screen_name||a.uid} <span class="remove">✕</span>
+    </span>`
+  ).join('');
+}
+
+async function loadTaskGroups() {
+  try {
+    const r = await fetch("/api/groups");
+    const d = await r.json();
+    if (d.ok && d.data) {
+      let opts = '<option value="">选择分组...</option>';
+      let quickHtml = '';
+      for (const g of d.data) {
+        opts += `<option value="${g.id}">${g.name} (${g.account_count||0}个)</option>`;
+        quickHtml += `<button class="btn btn-sm btn-outline" style="margin:2px 4px 2px 0" onclick="quickAddByDim('group',${g.id},'${g.name}')">📁 ${g.name} (${g.account_count||0})</button>`;
+      }
+      $("taskGroup").innerHTML = opts;
+      $("quickGroupBtns").innerHTML = quickHtml || '<span style="color:var(--sub)">无分组</span>';
+    }
+  } catch(e) { console.error("loadTaskGroups:", e); }
+}
+
+async function loadTaskTags() {
+  try {
+    const r = await fetch("/api/tags");
+    const d = await r.json();
+    if (d.ok && d.data) {
+      let opts = '<option value="">选择标签...</option>';
+      let quickTagHtml = '';
+      for (const t of d.data) {
+        opts += `<option value="${t.id}">${t.name} (${t.account_count||0}个)</option>`;
+        quickTagHtml += `<button class="btn btn-sm btn-outline" style="margin:2px 4px 2px 0" onclick="quickAddByDim('tag',${t.id},'${t.name}')">🏷 ${t.name} (${t.account_count||0})</button>`;
+      }
+      $("taskTag").innerHTML = opts;
+      $("quickTagBtns").innerHTML = quickTagHtml || '<span style="color:var(--sub)">无标签</span>';
+    }
+  } catch(e) { console.error("loadTaskTags:", e); }
+}
+
+function renderTasks(tasks) {
+  if (!tasks.length) {
+    $("taskList").innerHTML = '<div class="empty">暂无爬取任务，请在上方添加</div>';
+    $("taskCount").textContent = '';
+    return;
+  }
+  $("taskCount").textContent = `(${tasks.length} 个任务)`;
+
+  let html = '<table><thead><tr><th>ID</th><th>任务名称</th><th>目标账号</th><th>类型</th><th>间隔</th><th>下次执行</th><th>状态</th><th>操作</th></tr></thead><tbody>';
+  for (const t of tasks) {
+    const targets = t.targets || [];
+    const targetNames = targets.length
+      ? targets.map(a => a.screen_name || a.uid).join(', ')
+      : '—';
+    const ptLabels = {original:'原创',repost:'转发',article:'文章',image:'图片',video:'视频'};
+    const pt = (t.post_types || []);
+    const ptDisplay = pt.length ? pt.map(p => ptLabels[p]||p).join(' ') : '全部';
+    const runInfo = _runningTasks[t.id];
+    const isRunning = runInfo && runInfo.status === 'running';
+    html += `<tr>
+      <td><code style="font-size:11px">#${t.id}</code></td>
+      <td><strong>${t.name}</strong> <span style="font-size:11px;color:var(--sub)">(${t.target_count}个)</span></td>
+      <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px" title="${targetNames}">${targetNames}</td>
+      <td style="font-size:11px">${ptDisplay}</td>
+      <td>${t.is_one_time ? '<span class="tag tag-info">单次</span>' : ('每 '+t.interval_hours+'分钟')}</td>
+      <td>${isRunning ? '<span style="color:var(--accent);font-weight:600">⏳ 执行中...</span>' : (t.next_run ? fmtShortTime(t.next_run) : '—')}</td>
+      <td>${isRunning
+        ? `<span class="tag tag-info">⏳ ${runInfo.done}/${runInfo.total} 账号 · ${runInfo.total_posts}条</span>`
+        : (t.is_one_time ? '<span class="tag tag-info">单次</span>' : (t.enabled ? '<span class="tag tag-success">运行中</span>' : '<span class="tag tag-info">已暂停</span>'))}</td>
+      <td style="white-space:nowrap">
+        <button class="btn btn-sm btn-accent" onclick="runTaskNow(${t.id})" ${isRunning?'disabled':''}>▶</button>
+        ${t.is_one_time ? '' : `<button class="btn btn-sm ${t.enabled ? 'btn-outline' : 'btn-success'}" onclick="toggleTask(${t.id},${t.enabled})" ${isRunning?'disabled':''}>${t.enabled ? '⏸' : '▶'}</button>`}
+        <button class="btn btn-sm btn-outline" onclick="openTaskDetail(${t.id})">✎</button>
+        <button class="btn btn-sm btn-danger" onclick="removeTask(${t.id},'${t.name.replace(/'/g,"\\'")}')">✕</button>
+      </td></tr>`;
+  }
+  html += '</tbody></table>';
+  $("taskList").innerHTML = html;
+}
+
+async function removeTask(taskId, name) {
+  if (!confirm(`确定删除任务 [${name}]？`)) return;
+  try {
+    const r = await fetch(`/api/scheduler/tasks/${taskId}`, {method:"DELETE"});
+    const d = await r.json();
+    if (d.ok) { showToast(d.message, "success"); loadCrawlStatus(); }
+    else { showToast(d.message, "error"); }
+  } catch(e) { showToast("删除失败: "+e.message, "error"); }
+}
+
+async function toggleTask(taskId, enabled) {
+  const action = enabled ? "pause" : "resume";
+  try {
+    const r = await fetch(`/api/scheduler/tasks/${taskId}/${action}`, {method:"POST"});
+    const d = await r.json();
+    if (d.ok) { showToast(d.message, "success"); loadCrawlStatus(); }
+    else { showToast(d.message, "error"); }
+  } catch(e) { showToast("操作失败: "+e.message, "error"); }
+}
+
+async function runTaskNow(taskId) {
+  // 立即禁用按钮 + 反馈
+  const btns = document.querySelectorAll(`button[onclick*="runTaskNow(${taskId})"]`);
+  btns.forEach(b => { b.disabled = true; b.textContent = "⏳"; });
+  showToast("正在启动爬取...", "info");
+  // 本地预填状态，让轮询前就有视觉反馈
+  _runningTasks[taskId] = {status:"running", done:0, total:0, current_uid:"", total_posts:0, name:""};
+  try {
+    const r = await fetch(`/api/scheduler/tasks/${taskId}/run`, {method:"POST"});
+    const d = await r.json();
+    if (d.ok) { showToast(d.message, "success"); loadCrawlStatus(); }
+    else { showToast(d.message, "error"); btns.forEach(b => { b.disabled = false; b.textContent = "▶"; }); delete _runningTasks[taskId]; }
+  } catch(e) { showToast("请求失败: "+e.message, "error"); btns.forEach(b => { b.disabled = false; b.textContent = "▶"; }); delete _runningTasks[taskId]; }
+}
+
+// ── 任务详情弹窗 ──────────────────────────────────
+async function openTaskDetail(taskId) {
+  try {
+    const r = await fetch("/api/scheduler/tasks");
+    const d = await r.json();
+    if (!d.ok) return;
+    const t = d.data.find(x => x.id === taskId);
+    if (!t) { showToast("任务不存在", "error"); return; }
+
+    const targets = t.targets || [];
+    const targetNames = targets.map(a => a.screen_name || a.uid);
+
+    const overlay = document.createElement("div");
+    overlay.className = "modal-overlay";
+    overlay.innerHTML = `<div class="modal-box">
+      <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">✕</button>
+      <h3 style="margin:0 0 16px;font-size:16px;font-weight:600">任务详情 #${taskId}</h3>
+
+      <div style="margin-bottom:12px">
+        <label style="font-size:12px;color:var(--sub);display:block;margin-bottom:4px">任务名称</label>
+        <input id="editTaskName" style="width:100%" value="${t.name}">
+      </div>
+
+      <div style="margin-bottom:12px">
+        <label style="font-size:12px;color:var(--sub);display:block;margin-bottom:4px">任务类型</label>
+        <select id="editTaskType" style="width:100%">
+          <option value="0" ${!t.is_one_time ? 'selected' : ''}>定时任务</option>
+          <option value="1" ${t.is_one_time ? 'selected' : ''}>单次执行</option>
+        </select>
+      </div>
+
+      <div style="margin-bottom:12px" id="editIntervalRow" ${t.is_one_time ? 'style="display:none"' : ''}>
+        <label style="font-size:12px;color:var(--sub);display:block;margin-bottom:4px">间隔（分钟）</label>
+        <input id="editTaskInterval" type="number" value="${t.interval_hours}" min="1" max="4320" style="width:80px;text-align:center">
+      </div>
+
+      <div style="margin-bottom:12px">
+        <label style="font-size:12px;color:var(--sub);display:block;margin-bottom:4px">帖子类型</label>
+        <div style="display:flex;gap:8px;flex-wrap:wrap" id="editPostTypes">
+          ${(() => {
+            const pts = t.post_types || [];
+            const labels = {original:'原创',repost:'转发',article:'文章',image:'图片',video:'视频'};
+            return Object.entries(labels).map(([k,v]) => 
+              `<label style="font-size:12px"><input type="checkbox" name="editPostType" value="${k}" ${!pts.length||pts.includes(k)?'checked':''}> ${v}</label>`
+            ).join('');
+          })()}
+        </div>
+      </div>
+
+      <div style="margin-bottom:12px">
+        <label style="font-size:12px;color:var(--sub);display:block;margin-bottom:4px">目标账号</label>
+        <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px" id="editTargets">
+          ${targets.map(a => `<span class="tag tag-info" style="cursor:pointer" onclick="this.remove()">${a.screen_name||a.uid} <input type="hidden" name="targetUid" value="${a.uid}"></span>`).join('')}
+        </div>
+        <div style="position:relative">
+          <input id="editTargetSearch" placeholder="搜索账号添加..." style="width:100%;font-size:12px"
+            oninput="filterEditTargets()" onfocus="filterEditTargets()" onblur="setTimeout(()=>$('editTargetDD').style.display='none',150)" autocomplete="off">
+          <div id="editTargetDD" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--card);border:1px solid var(--border);border-radius:6px;box-shadow:0 8px 25px rgba(0,0,0,.15);max-height:180px;overflow:auto;z-index:100" onmousedown="event.preventDefault()"></div>
+        </div>
+      </div>
+
+      <div style="text-align:right;margin-top:16px">
+        <button class="btn btn-outline btn-sm" onclick="this.closest('.modal-overlay').remove()">取消</button>
+        <button class="btn btn-primary btn-sm" onclick="saveTaskDetail(${taskId})" style="margin-left:8px">保存</button>
+      </div>
+    </div>`;
+    document.body.appendChild(overlay);
+    overlay.addEventListener("click", e => { if (e.target === overlay) overlay.remove(); });
+
+    // 加载可添加的账号列表
+    const accR = await fetch("/api/accounts");
+    const accD = await accR.json();
+    if (accD.ok) {
+      const existing = targets.map(a => a.uid);
+      let opts = '<option value="">+ 添加账号...</option>';
+      for (const a of accD.data) {
+        if (a.status === 1 && !existing.includes(a.uid))
+          opts += `<option value="${a.uid}">${a.screen_name||a.uid}</option>`;
+      }
+      $("editAddTarget").innerHTML = opts;
+    }
+
+    // 类型切换联动
+    $("editTaskType").onchange = function() {
+      $("editIntervalRow").style.display = this.value === "1" ? "none" : "block";
+    };
+
+  } catch(e) { showToast("加载失败: "+e.message, "error"); }
+}
+
+function addEditTarget() {
+  // 已废弃，由 filterEditTargets 替代
+}
+
+function filterEditTargets() {
+  const kw = ($("editTargetSearch")?.value || "").trim().toLowerCase();
+  const dd = $("editTargetDD");
+  if (!dd) return;
+
+  const existing = [...document.querySelectorAll("#editTargets input[name='targetUid']")].map(el => el.value);
+  let list = _cachedAccounts.filter(a => a.status === 1 && !existing.includes(a.uid));
+  if (kw) list = list.filter(a => (a.screen_name||"").toLowerCase().includes(kw) || a.uid.includes(kw));
+
+  if (!list.length) {
+    dd.innerHTML = '<div style="padding:8px 12px;font-size:12px;color:var(--sub)">' + (existing.length ? '全部账号已添加' : '无匹配账号') + '</div>';
+  } else {
+    dd.innerHTML = list.map(a =>
+      `<label style="display:flex;align-items:center;gap:8px;padding:7px 12px;cursor:pointer;font-size:13px;white-space:nowrap"
+             onmousedown="return false;" onmouseover="this.style.background='var(--primary-light)'" onmouseout="this.style.background=''">
+        <input type="checkbox" data-uid="${a.uid}" onchange="addEditTargetByCheckbox(this)" style="flex-shrink:0;margin:0">
+        <span>${a.screen_name||a.uid}</span><span style="color:var(--sub);font-size:11px;margin-left:auto">${a.uid}</span>
+      </label>`
+    ).join('');
+  }
+  dd.style.display = "block";
+}
+
+function addEditTargetByCheckbox(cb) {
+  const uid = cb.dataset.uid;
+  const a = _cachedAccounts.find(x => x.uid === uid);
+  if (!a) return;
+  const container = $("editTargets");
+  if (!container) return;
+  const span = document.createElement("span");
+  span.className = "tag tag-info";
+  span.style.cursor = "pointer";
+  span.innerHTML = `${a.screen_name||a.uid} <input type="hidden" name="targetUid" value="${uid}">`;
+  span.onclick = () => span.remove();
+  container.appendChild(span);
+  $("editTargetSearch").value = "";
+  filterEditTargets(); // 刷新列表
+}
+
+async function saveTaskDetail(taskId) {
+  const name = $("editTaskName").value.trim();
+  const isOneTime = $("editTaskType").value === "1";
+  const interval = isOneTime ? null : parseInt($("editTaskInterval").value) || 360;
+  const uids = [...document.querySelectorAll("#editTargets input[name='targetUid']")].map(el => el.value);
+  const postTypes = [...document.querySelectorAll("#editPostTypes input:checked")].map(cb => cb.value);
+
+  try {
+    const r = await fetch(`/api/scheduler/tasks/${taskId}`, {
+      method:"PUT", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({name, interval, is_one_time: isOneTime, uids, post_types: postTypes})
+    });
+    const d = await r.json();
+    if (d.ok) {
+      document.querySelector(".modal-overlay")?.remove();
+      showToast("已保存", "success");
+      loadCrawlStatus();
+    } else {
+      showToast(d.message || d.error || "保存失败", "error");
+    }
+  } catch(e) { showToast("保存失败: "+e.message, "error"); }
+}
+
+// ── 爬取日志检索 ────────────────────────────────
+async function loadCrawlLogs() {
+  const params = new URLSearchParams();
+  const tid = $("logFilterTaskId").value.trim();
+  const status = $("logFilterStatus").value;
+  const kw = $("logFilterKeyword").value.trim();
+  const start = $("logFilterStart").value;
+  const end = $("logFilterEnd").value;
+  const limit = $("logFilterLimit").value || 50;
+  if (tid) params.set("task_id", tid);
+  if (status) params.set("status", status);
+  if (kw) params.set("keyword", kw);
+  if (start) params.set("start_time", start + " 00:00:00");
+  if (end) params.set("end_time", end + " 23:59:59");
+  params.set("limit", limit);
+
+  try {
+    const r = await fetch(`/api/crawl/status?${params}`);
+    const d = await r.json();
+    if (d.ok) {
+      const logs = d.data.last_logs;
+      // 只展示汇总行 + 错误行，账号明细在系统日志查看
+      const filtered = logs.filter(l => !l.uid || l.status === 'error');
+      if (filtered.length) {
+        let html = '<table><thead><tr><th>任务ID</th><th>任务</th><th>新增</th><th>执行时间</th><th>结束时间</th><th>状态</th><th>错误</th></tr></thead><tbody>';
+        for (const l of filtered) {
+          const isError = l.status === 'error' && l.uid;
+          html += `<tr ${isError ? 'style="background:#fef2f2"' : 'style="background:#f0fdf4;font-weight:600"'}>
+            <td><code style="font-size:11px">${l.task_id ? '#'+l.task_id : '—'}</code></td>
+            <td>${isError ? '⚠ ' + (l.task_name||'') + ' uid:' + l.uid : '📋 ' + (l.task_name||'') + ' 汇总'}</td>
+            <td>${l.posts_count}</td>
+            <td style="font-size:11px">${fmtShortTime(l.started_at)}</td>
+            <td style="font-size:11px">${fmtShortTime(l.finished_at)}</td>
+            <td><span class="tag ${l.status==='success'?'tag-success':'tag-danger'}">${l.status}</span></td>
+            <td style="max-width:120px;overflow:hidden;text-overflow:ellipsis;font-size:11px">${l.error_msg||"—"}</td></tr>`;
+        }
+        html += "</tbody></table>";
+        $("crawlLogs").innerHTML = html;
+      } else {
+        $("crawlLogs").innerHTML = '<div class="empty">无匹配记录</div>';
+      }
+    }
+  } catch(e) { console.error("loadCrawlLogs:", e); }
+}
+
+function clearLogFilter() {
+  const ids = ["logFilterTaskId","logFilterStatus","logFilterKeyword","logFilterStart","logFilterEnd"];
+  for (const id of ids) { const el = $(id); if (el) el.value = ""; }
+  const limitEl = $("logFilterLimit");
+  if (limitEl) limitEl.value = "50";
+  loadCrawlLogs();
+}
+
+// ── 系统日志 ────────────────────────────────────
+let logAutoRefresh = false;
+let logTimer = null;
+
+async function loadLogs() {
+  const params = new URLSearchParams();
+  const level = $("logLevel").value; if (level) params.set("level", level);
+  const module = $("logModule").value; if (module) params.set("module", module);
+  const kw = $("logKeyword").value.trim(); if (kw) params.set("keyword", kw);
+  const lines = $("logLines").value || 200;
+  params.set("lines", lines);
+
+  try {
+    const r = await fetch(`/api/logs?${params}`);
+    const d = await r.json();
+    if (!d.ok) { $("logContainer").innerHTML = `<div class="empty" style="color:#f88">加载失败: ${d.error}</div>`; return; }
+
+    const data = d.data;
+    if (!data.lines.length) {
+      $("logContainer").innerHTML = '<div class="empty" style="color:#888">无匹配日志</div>';
+      return;
+    }
+
+    // 语法高亮渲染
+    let html = "";
+    for (const line of data.lines) {
+      let cls = "";
+      if (line.includes("| ERROR")) cls = "log-error";
+      else if (line.includes("| WARNING")) cls = "log-warn";
+      else if (line.includes("| INFO")) cls = "log-info";
+      else if (line.includes("| DEBUG")) cls = "log-debug";
+
+      html += `<div class="${cls}">${escapeHtml(line)}</div>`;
+    }
+
+    const stat = `共 ${data.total} 条 · 最近 ${lines} 行`;
+    $("logContainer").innerHTML = `<div style="color:#666;margin-bottom:8px;font-size:11px">${stat}</div>${html}`;
+    $("logContainer").scrollTop = 0;
+  } catch(e) {
+    $("logContainer").innerHTML = `<div class="empty" style="color:#f88">请求失败: ${e.message}</div>`;
+  }
+}
+
+function escapeHtml(s) {
+  const el = document.createElement("span");
+  el.textContent = s;
+  return el.innerHTML;
+}
+
+function toggleLogAutoRefresh() {
+  logAutoRefresh = !logAutoRefresh;
+  $("btnLogAuto").textContent = logAutoRefresh ? "⏸ 停止刷新" : "🔄 自动刷新";
+  if (logAutoRefresh) {
+    logTimer = setInterval(loadLogs, 5000);
+    loadLogs();
+  } else {
+    clearInterval(logTimer);
+  }
+}
+
+// ── 初始化 ──────────────────────────────────────
+loadAccounts();
+loadCrawlStatus();
+loadCredStatus();
+</script>
+</body>
+</html>
