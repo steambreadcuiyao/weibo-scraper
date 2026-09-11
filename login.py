@@ -51,18 +51,58 @@ def _extract_xsrf(cookie_str: str) -> str:
     return m.group(1) if m else ""
 
 
+def _slim_state(state: dict) -> dict:
+    """精简 storage_state：登录态只依赖 cookie，剔除体积巨大的 localStorage。
+
+    微博前端会在 localStorage 写入分片降级缓存（如 xxx_degraded），单条可达数百 KB。
+    这类数据与登录无关，保留只会让状态文件膨胀、写入变慢并极易被中断产生截断 JSON。
+    """
+    return {
+        "cookies": state.get("cookies", []),
+        "origins": [
+            {"origin": o.get("origin", ""), "localStorage": []}
+            for o in state.get("origins", [])
+        ],
+    }
+
+
 def _save_storage_state(context) -> None:
+    """原子写入 storage state，避免中途中断产生非法（截断）JSON"""
     os.makedirs(os.path.dirname(AUTH_STATE_FILE), exist_ok=True)
-    with open(AUTH_STATE_FILE, "w") as f:
-        json.dump(context.storage_state(), f)
-    logger.info(f"storage state 已保存: {AUTH_STATE_FILE}")
+    state = _slim_state(context.storage_state())
+    tmp = AUTH_STATE_FILE + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(state, f)
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp, AUTH_STATE_FILE)   # 原子替换：要么旧文件，要么完整新文件
+    logger.info(f"storage state 已保存: {AUTH_STATE_FILE} ({os.path.getsize(AUTH_STATE_FILE)} bytes)")
 
 
 # ── 1. 自动恢复已保存状态 ──────────────────────────
 
+def _state_file_ok(path: str) -> bool:
+    """校验 storage_state 文件是否是合法 JSON；损坏则改名隔离并返回 False"""
+    try:
+        with open(path, encoding="utf-8") as f:
+            json.load(f)
+        return True
+    except Exception as e:
+        bad = f"{path}.corrupt-{time.strftime('%Y%m%d%H%M%S')}"
+        try:
+            os.replace(path, bad)
+            logger.warning(f"storage state 文件损坏({e})，已隔离为 {bad}，将走重新登录")
+        except Exception:
+            logger.warning(f"storage state 文件损坏({e})，且隔离失败")
+        return False
+
+
 def try_auto_login_with_saved_state() -> dict | None:
     """用 storage_state 文件无需扫码自动恢复登录"""
     if not os.path.exists(AUTH_STATE_FILE):
+        return None
+
+    if not _state_file_ok(AUTH_STATE_FILE):
         return None
 
     logger.info("尝试用已保存的登录状态恢复...")
