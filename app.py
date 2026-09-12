@@ -1,5 +1,6 @@
 """Flask 主应用 — API 路由 + 静态页面服务"""
 
+import os
 import logging
 import threading
 from flask import Flask, request, jsonify, send_from_directory
@@ -593,8 +594,28 @@ def api_log_modules():
 
 # ── 启动入口 ──────────────────────────────────────
 
+def _detach_console():
+    """把本进程从 Windows 控制台解绑，避免关闭启动它的 CMD/终端窗口时服务被连带杀掉。
+
+    Windows 上进程默认绑定到启动它的控制台，窗口关闭时系统会向控制台内所有
+    进程发送 CTRL_CLOSE_EVENT，Python 收到后直接退出。调用 FreeConsole() 后
+    进程不再属于任何控制台，关窗口不再影响服务。
+    日志仍正常写入 data/system.log。
+    """
+    if os.name != "nt":
+        return
+    try:
+        import ctypes
+        ctypes.windll.kernel32.FreeConsole()
+        logger.info("已脱离控制台（关闭启动窗口不会再终止服务）")
+    except Exception as e:
+        logger.warning(f"脱离控制台失败（不影响运行）: {e}")
+
+
 def start_server():
     """启动 Flask 服务"""
+    _detach_console()
+
     # 初始化调度器
     try:
         from scheduler import init_scheduler
