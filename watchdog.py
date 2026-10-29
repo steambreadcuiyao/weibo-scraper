@@ -29,6 +29,11 @@ LOCK_FILE = os.path.join(DATA_DIR, "watchdog.lock")
 STAMP_FILE = os.path.join(DATA_DIR, "watchdog.laststart")
 STREAK_FILE = os.path.join(DATA_DIR, "watchdog.streak")
 
+# 服务自身标准输出的重定向文件（werkzeug / traceback 走这里，不走 logging）
+STDOUT_LOG = os.path.join(DATA_DIR, "service-stdout.log")
+STDOUT_MAX_BYTES = 5 * 1024 * 1024   # 5MB 轮转
+STDOUT_BACKUPS = 2                   # 保留 2 个历史文件（≈15MB 上限）
+
 MAX_FAIL_STREAK = 3         # 连续拉起失败几次后进入冷却
 
 PYTHON = r"C:\Users\Administrator\.workbuddy\binaries\python\envs\weibo\Scripts\pythonw.exe"
@@ -169,6 +174,34 @@ def kill_app_processes(logger):
         logger.warning(f"结束进程时出错: {e}")
 
 
+def rotate_stdout_log(logger):
+    """service-stdout.log 超过上限则轮转。
+
+    这个文件接收服务的 stdout/stderr（werkzeug 访问日志、未捕获 traceback），
+    不走 logging，因此 RotatingFileHandler 管不到它，必须自己处理，否则会无限膨胀。
+    轮转时机选在「拉起新进程之前」：此刻旧进程已退出（或刚被杀掉），
+    文件句柄不冲突，rename 能稳定成功。
+    """
+    try:
+        if not os.path.exists(STDOUT_LOG):
+            return
+        size = os.path.getsize(STDOUT_LOG)
+        if size < STDOUT_MAX_BYTES:
+            return
+
+        oldest = f"{STDOUT_LOG}.{STDOUT_BACKUPS}"
+        if os.path.exists(oldest):
+            os.remove(oldest)
+        for i in range(STDOUT_BACKUPS - 1, 0, -1):
+            src = f"{STDOUT_LOG}.{i}"
+            if os.path.exists(src):
+                os.replace(src, f"{STDOUT_LOG}.{i + 1}")
+        os.replace(STDOUT_LOG, f"{STDOUT_LOG}.1")
+        logger.info(f"service-stdout.log 已轮转（{size / 1024 / 1024:.1f}MB）")
+    except OSError as e:
+        logger.warning(f"service-stdout.log 轮转失败（继续追加）: {e}")
+
+
 def start_app(logger) -> bool:
     """以独立进程方式启动服务"""
     CREATE_NO_WINDOW = 0x08000000
@@ -176,8 +209,9 @@ def start_app(logger) -> bool:
     DETACHED_PROCESS = 0x00000008
     flags = DETACHED_PROCESS | CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP
 
-    out = open(os.path.join(DATA_DIR, "service-stdout.log"), "a",
-               encoding="utf-8", errors="replace")
+    rotate_stdout_log(logger)
+
+    out = open(STDOUT_LOG, "a", encoding="utf-8", errors="replace")
     try:
         p = subprocess.Popen(
             [PYTHON, APP_PY],
@@ -196,6 +230,12 @@ def start_app(logger) -> bool:
     except Exception as e:
         logger.error(f"启动服务失败: {e}")
         return False
+    finally:
+        # 子进程已继承句柄，父进程这份要关掉，否则每次拉起泄漏一个句柄
+        try:
+            out.close()
+        except OSError:
+            pass
 
 
 def wait_healthy(logger, timeout=45) -> bool:

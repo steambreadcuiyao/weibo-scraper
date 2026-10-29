@@ -8,13 +8,30 @@ from logging.handlers import RotatingFileHandler
 LOG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
 LOG_FILE = os.path.join(LOG_DIR, "system.log")
 LOG_MAX_BYTES = 5 * 1024 * 1024   # 5MB 轮转
-LOG_BACKUP_COUNT = 10              # 保留最近 10 个
+LOG_BACKUP_COUNT = 5               # 保留最近 5 个（5×5MB ≈ 25MB 上限）
 
 # 统一格式
 LOG_FORMAT = "%(asctime)s | %(levelname)-5s | %(name)-14s | %(message)s"
 DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
 
 _initialized = False
+
+
+class SafeRotatingFileHandler(RotatingFileHandler):
+    """Windows 下轮转失败不致命。
+
+    RotatingFileHandler 在多进程同时写同一文件时不安全：一个进程 rename 时另一个
+    进程还持有该文件的句柄，Windows 会抛 PermissionError。原生的做法会让这次
+    轮转彻底失败（日志继续往老文件里追加，直到重启），虽然不至于崩服务，但会让
+    文件无限变大。这里吞掉 OSError，下一次写日志时会再次尝试轮转。
+    """
+
+    def doRollover(self):
+        try:
+            super().doRollover()
+        except OSError as e:
+            # 另一个进程还占着文件，跳过本次，下次再试
+            logging.getLogger("weibo").debug("日志轮转跳过: %s", e)
 
 
 def setup_logging(log_level: int = logging.INFO):
@@ -34,7 +51,7 @@ def setup_logging(log_level: int = logging.INFO):
     root.handlers.clear()
 
     # ── 文件 handler（轮转）──
-    file_handler = RotatingFileHandler(
+    file_handler = SafeRotatingFileHandler(
         LOG_FILE,
         maxBytes=LOG_MAX_BYTES,
         backupCount=LOG_BACKUP_COUNT,
@@ -63,11 +80,58 @@ def get_log_file_path() -> str:
     return LOG_FILE
 
 
+def _log_files() -> list:
+    """返回存在的日志文件，按「从旧到新」排序。
+
+    RotatingFileHandler 的命名：system.log（当前）→ system.log.1（次新）
+    → system.log.2 …… 序号越大越旧。
+    """
+    files = []
+    for i in range(LOG_BACKUP_COUNT, 0, -1):
+        p = f"{LOG_FILE}.{i}"
+        if os.path.exists(p):
+            files.append(p)
+    if os.path.exists(LOG_FILE):
+        files.append(LOG_FILE)
+    return files
+
+
+def _tail_lines(path: str, n: int) -> list:
+    """从文件尾部读最后 n 行。
+
+    按字节块从后往前读，避免把 5MB 文件整体载入内存；多字节字符可能被块边界
+    截断，但先拼字节再统一 decode，所以不会乱码。
+    """
+    if n <= 0:
+        return []
+    block = 64 * 1024
+    try:
+        with open(path, "rb") as f:
+            f.seek(0, os.SEEK_END)
+            pos = f.tell()
+            data = b""
+            # 多读一行，防止末行被块边界切开后误判
+            while pos > 0 and data.count(b"\n") <= n:
+                step = min(block, pos)
+                pos -= step
+                f.seek(pos)
+                data = f.read(step) + data
+    except OSError:
+        return []
+
+    lines = [ln.decode("utf-8", errors="replace") for ln in data.split(b"\n")]
+    lines = [ln for ln in lines if ln.strip()]
+    return lines[-n:]
+
+
 def read_logs(lines: int = 200, level: str = None, keyword: str = None,
               start_time: str = None, end_time: str = None,
               module: str = None) -> dict:
     """
     从日志文件读取最近的日志行，支持过滤
+
+    读取范围覆盖轮转后的历史文件（system.log.1 ~ system.log.N），
+    当前文件不足 N 行时自动向更早的备份文件续读。
 
     参数:
         lines:   读取最近 N 行
@@ -79,14 +143,23 @@ def read_logs(lines: int = 200, level: str = None, keyword: str = None,
     返回:
         {"total": N, "lines": [...]}
     """
-    if not os.path.exists(LOG_FILE):
+    files = _log_files()
+    if not files:
         return {"total": 0, "lines": []}
 
-    with open(LOG_FILE, "r", encoding="utf-8", errors="replace") as f:
-        all_lines = f.readlines()
+    # 从最新文件往回取，凑够 lines 行即止
+    collected = []
+    for path in reversed(files):
+        need = lines - len(collected)
+        if need <= 0:
+            break
+        part = _tail_lines(path, need)
+        if part:
+            collected = part + collected
 
     # 倒序取最近 N 行
-    recent = all_lines[-lines:] if len(all_lines) > lines else all_lines
+    recent = collected[-lines:] if len(collected) > lines else collected
+    recent = list(recent)
     recent.reverse()
 
     result = []

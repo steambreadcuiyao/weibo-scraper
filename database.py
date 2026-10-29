@@ -93,7 +93,10 @@ def init_db():
 
         CREATE INDEX IF NOT EXISTS idx_posts_uid ON posts(uid);
         CREATE INDEX IF NOT EXISTS idx_posts_created ON posts(created_at);
-        CREATE INDEX IF NOT EXISTS idx_posts_text ON posts(text);
+        -- 全文检索走 text LIKE '%关键词%'（前置通配），索引无法命中，
+        -- 而为 text 建索引要多占一倍空间（曾占 42MB）并拖慢每次写入，故不建。
+        -- 下面这句负责清理历史库里的旧索引（新库为空操作）。
+        DROP INDEX IF EXISTS idx_posts_text;
 
         CREATE TABLE IF NOT EXISTS crawl_logs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -363,6 +366,12 @@ def get_posts_by_uid(uid: str, limit: int = 50) -> list[dict]:
 
 # ── 爬取日志 ───────────────────────────────────────
 
+# crawl_logs 轮转上限：超过则清理最旧记录（与 x-scraper app_logs 同策略，防止日志无限膨胀）
+CRAWL_LOGS_KEEP = 10000
+# 轮转检查触发间隔：每写入 100 条检查一次（按当前速率约每天 1 次）
+CRAWL_LOGS_ROTATE_EVERY = 100
+
+
 def add_crawl_log(uid: str, status: str, posts_count: int = 0,
                   error_msg: str = "", started_at: str = None,
                   task_id: int = None) -> int:
@@ -376,6 +385,18 @@ def add_crawl_log(uid: str, status: str, posts_count: int = 0,
     """, (task_id, uid, status, posts_count, error_msg, started_at or now, now))
     conn.commit()
     log_id = cursor.lastrowid
+    # 日志轮转：每 100 条触发一次检查，超过上限清理最旧记录
+    if log_id % CRAWL_LOGS_ROTATE_EVERY == 0:
+        try:
+            conn.execute(
+                "DELETE FROM crawl_logs WHERE id < "
+                "(SELECT MIN(id) FROM (SELECT id FROM crawl_logs "
+                "ORDER BY id DESC LIMIT ?))",
+                (CRAWL_LOGS_KEEP,),
+            )
+            conn.commit()
+        except Exception:
+            pass  # 轮转失败不影响正常日志写入
     conn.close()
     return log_id
 
